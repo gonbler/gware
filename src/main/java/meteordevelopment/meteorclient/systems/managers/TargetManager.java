@@ -154,7 +154,7 @@ public class TargetManager {
                         || !entity.isAlive())
                     continue;
 
-                if (validEntities != null && validEntities.get().contains(entity.getType()))
+                if (validEntities != null && !validEntities.get().contains(entity.getType()))
                     continue;
 
                 if (ignorePassive.get()) {
