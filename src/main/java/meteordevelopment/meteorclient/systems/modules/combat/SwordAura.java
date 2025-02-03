@@ -1,7 +1,9 @@
 package meteordevelopment.meteorclient.systems.modules.combat;
 
 import java.util.Set;
+
 import org.apache.commons.lang3.mutable.MutableDouble;
+
 import meteordevelopment.meteorclient.MeteorClient;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -67,14 +69,13 @@ public class SwordAura extends Module {
             new EntityTypeListSetting.Builder().name("entities").description("Entities to attack.")
                     .onlyAttackable().defaultValue(EntityType.PLAYER).build());
 
-    private final Setting<SortPriority> priority =
-            sgGeneral.add(new EnumSetting.Builder<SortPriority>().name("priority")
+    private final Setting<SortPriority> priority = sgGeneral
+            .add(new EnumSetting.Builder<SortPriority>().name("priority")
                     .description("How to filter targets within range.")
                     .defaultValue(SortPriority.ClosestAngle).build());
 
-    private final Setting<Boolean> ignorePassive =
-            sgGeneral.add(new BoolSetting.Builder().name("ignore-passive")
-                    .description("Does not attack passive mobs.").defaultValue(false).build());
+    private final Setting<Boolean> ignorePassive = sgGeneral.add(new BoolSetting.Builder().name("ignore-passive")
+            .description("Does not attack passive mobs.").defaultValue(false).build());
 
     private final Setting<Boolean> forcePauseEat = sgGeneral.add(new BoolSetting.Builder()
             .name("force-pause-on-eat").description("Does not attack while using an item.")
@@ -260,8 +261,7 @@ public class SwordAura extends Module {
         MutableDouble attackSpeed = new MutableDouble(
                 mc.player.getAttributeBaseValue(EntityAttributes.GENERIC_ATTACK_SPEED));
 
-        AttributeModifiersComponent attributeModifiers =
-                itemStack.get(DataComponentTypes.ATTRIBUTE_MODIFIERS);
+        AttributeModifiersComponent attributeModifiers = itemStack.get(DataComponentTypes.ATTRIBUTE_MODIFIERS);
         if (attributeModifiers != null) {
             attributeModifiers.applyModifiers(EquipmentSlot.MAINHAND, (entry, modifier) -> {
                 if (entry == EntityAttributes.GENERIC_ATTACK_SPEED) {
