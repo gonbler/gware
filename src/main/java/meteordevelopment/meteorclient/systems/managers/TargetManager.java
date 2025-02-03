@@ -5,18 +5,23 @@ import static meteordevelopment.meteorclient.MeteorClient.mc;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 
 import meteordevelopment.meteorclient.MeteorClient;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.DoubleSetting;
+import meteordevelopment.meteorclient.settings.EntityTypeListSetting;
 import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.IntSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.settings.Settings;
+import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityType;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.mob.EndermanEntity;
 import net.minecraft.entity.mob.ZombifiedPiglinEntity;
 import net.minecraft.entity.passive.WolfEntity;
@@ -51,8 +56,14 @@ public class TargetManager {
     private final Setting<Boolean> ignorePassive = sgTargets.add(new BoolSetting.Builder().name("ignore-passive")
             .description("Does not attack passive mobs.").defaultValue(false).build());
 
-    public TargetManager(Module module) {
+    private Setting<Set<EntityType<?>>> validEntities = null;
+
+    public TargetManager(Module module, boolean entityListFilter) {
         module.settings.groups.addAll(settings.groups);
+
+        validEntities = sgTargets.add(
+                new EntityTypeListSetting.Builder().name("entities").description("Entities to target.")
+                        .onlyAttackable().defaultValue(EntityType.PLAYER).build());
     }
 
     // Always returns true to use the normal filters
@@ -81,6 +92,15 @@ public class TargetManager {
                             && entity.getInventory().armor.get(3).isEmpty())
                         continue;
                 }
+
+                if (entity.isCreative())
+                    continue;
+                if (!Friends.get().shouldAttack(entity))
+                    continue;
+                if (entity.equals(mc.player) || entity.equals(mc.cameraEntity))
+                    continue;
+                if (entity.isDead())
+                    continue;
 
                 entities.add(entity);
             }
@@ -127,6 +147,15 @@ public class TargetManager {
         // Entities by class to use the box for more optimized intersection
         for (Entity entity : mc.world.getEntitiesByClass(Entity.class, box, e -> !e.isRemoved())) {
             if (entity != null && entity.getBoundingBox().squaredMagnitude(pos) < rangeSqr && isGood.test(entity)) {
+                if (entity.equals(mc.player) || entity.equals(mc.cameraEntity))
+                    continue;
+
+                if ((entity instanceof LivingEntity livingEntity && livingEntity.isDead())
+                        || !entity.isAlive())
+                    continue;
+
+                if (validEntities != null && validEntities.get().contains(entity.getType()))
+                    continue;
 
                 if (ignorePassive.get()) {
                     if (entity instanceof EndermanEntity enderman && !enderman.isAngry())
@@ -134,6 +163,13 @@ public class TargetManager {
                     if (entity instanceof ZombifiedPiglinEntity piglin && !piglin.isAngryAt(mc.player))
                         continue;
                     if (entity instanceof WolfEntity wolf && !wolf.isAttacking())
+                        continue;
+                }
+
+                if (entity instanceof PlayerEntity player) {
+                    if (player.isCreative())
+                        continue;
+                    if (!Friends.get().shouldAttack(player))
                         continue;
                 }
 

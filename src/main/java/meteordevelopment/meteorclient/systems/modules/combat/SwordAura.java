@@ -1,5 +1,6 @@
 package meteordevelopment.meteorclient.systems.modules.combat;
 
+import java.util.List;
 import java.util.Set;
 
 import org.apache.commons.lang3.mutable.MutableDouble;
@@ -16,6 +17,7 @@ import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.friends.Friends;
+import meteordevelopment.meteorclient.systems.managers.TargetManager;
 import meteordevelopment.meteorclient.systems.managers.SwapManager.SwapMode;
 import meteordevelopment.meteorclient.systems.modules.Categories;
 import meteordevelopment.meteorclient.systems.modules.Module;
@@ -50,10 +52,6 @@ public class SwordAura extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgRender = settings.createGroup("Render");
 
-    private final Setting<Double> range = sgGeneral.add(new DoubleSetting.Builder().name("range")
-            .description("The maximum range the entity can be to attack it.").defaultValue(2.85)
-            .min(0).sliderMax(6).build());
-
     private final Setting<Boolean> silentSwapOverrideDelay = sgGeneral.add(new BoolSetting.Builder()
             .name("silent-swap-override-delay")
             .description(
@@ -64,18 +62,6 @@ public class SwordAura extends Module {
     private final Setting<Boolean> rotate = sgGeneral.add(new BoolSetting.Builder().name("rotate")
             .description("Whether or not to rotate to the entity to attack it.").defaultValue(true)
             .build());
-
-    private final Setting<Set<EntityType<?>>> entities = sgGeneral.add(
-            new EntityTypeListSetting.Builder().name("entities").description("Entities to attack.")
-                    .onlyAttackable().defaultValue(EntityType.PLAYER).build());
-
-    private final Setting<SortPriority> priority = sgGeneral
-            .add(new EnumSetting.Builder<SortPriority>().name("priority")
-                    .description("How to filter targets within range.")
-                    .defaultValue(SortPriority.ClosestAngle).build());
-
-    private final Setting<Boolean> ignorePassive = sgGeneral.add(new BoolSetting.Builder().name("ignore-passive")
-            .description("Does not attack passive mobs.").defaultValue(false).build());
 
     private final Setting<Boolean> forcePauseEat = sgGeneral.add(new BoolSetting.Builder()
             .name("force-pause-on-eat").description("Does not attack while using an item.")
@@ -112,9 +98,12 @@ public class SwordAura extends Module {
             .name("fade-time").description("How long to fade the bounding box render.").min(0)
             .sliderMax(2.0).defaultValue(0.8).build());
 
+    private final TargetManager targetManager = new TargetManager(this, true);
+
     private long lastAttackTime = 0;
-    private Entity target = null;
+    private List<Entity> targets = null;
     private Entity lastAttackedEntity = null;
+    private int targetIndex = 0;
 
     public SwordAura() {
         super(Categories.Combat, "sword-aura", "Automatically attacks entities with your sword");
@@ -122,8 +111,6 @@ public class SwordAura extends Module {
 
     @EventHandler
     public void onTick(TickEvent.Pre event) {
-        target = null;
-
         if (mc.player.isDead() || mc.player.isSpectator()) {
             return;
         }
@@ -147,45 +134,13 @@ public class SwordAura extends Module {
             return;
         }
 
-        target = TargetUtils.get(entity -> {
-            if (entity.equals(mc.player) || entity.equals(mc.cameraEntity))
-                return false;
+        targets = targetManager.getEntityTargets();
 
-            if ((entity instanceof LivingEntity livingEntity && livingEntity.isDead())
-                    || !entity.isAlive())
-                return false;
-
-            Box hitbox = entity.getBoundingBox();
-            Vec3d closestPointOnBoundingBox = getClosestPointOnBox(hitbox, mc.player.getEyePos());
-            if (!closestPointOnBoundingBox.isWithinRangeOf(mc.player.getEyePos(), range.get(),
-                    range.get()))
-                return false;
-
-            if (!entities.get().contains(entity.getType()))
-                return false;
-
-            if (ignorePassive.get()) {
-                if (entity instanceof EndermanEntity enderman && !enderman.isAngry())
-                    return false;
-                if (entity instanceof ZombifiedPiglinEntity piglin && !piglin.isAttacking())
-                    return false;
-                if (entity instanceof WolfEntity wolf && !wolf.isAttacking())
-                    return false;
-            }
-
-            if (entity instanceof PlayerEntity player) {
-                if (player.isCreative())
-                    return false;
-                if (!Friends.get().shouldAttack(player))
-                    return false;
-            }
-
-            return true;
-        }, priority.get());
-
-        if (target == null || !target.isAlive()) {
+        if (targets.isEmpty()) {
             return;
         }
+
+        Entity target = targets.get(targetIndex % targets.size());
 
         int delayCheckSlot = result.slot();
 
@@ -209,7 +164,7 @@ public class SwordAura extends Module {
             }
 
             if (MeteorClient.SWAP.beginSwap(result, true)) {
-                attack();
+                attack(target);
 
                 MeteorClient.SWAP.endSwap(true);
             }
@@ -245,13 +200,14 @@ public class SwordAura extends Module {
                 lineColor.get().copy().a((int) (lineColor.get().a * alpha)), shapeMode.get(), 0);
     }
 
-    public void attack() {
+    public void attack(Entity target) {
         mc.getNetworkHandler()
                 .sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
         mc.player.swingHand(Hand.MAIN_HAND);
 
         lastAttackedEntity = target;
         lastAttackTime = System.currentTimeMillis();
+        targetIndex++;
     }
 
     private boolean delayCheck(int slot) {
