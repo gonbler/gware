@@ -35,27 +35,12 @@ jobs:
           name: built-jar
           path: build/libs/*.jar
 
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create GitHub Release & Upload Assets
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: dev-${{ github.run_number }}
-          release_name: "Dev Build ${{ github.run_number }}"
-          body: "Development build ${{ github.sha }}"
-          draft: false
+          tag: dev-${{ github.run_number }}
+          name: "Dev Build ${{ github.run_number }}"
+          body: "Development build from commit ${{ github.sha }}"
           prerelease: true
-
-      - name: Upload Release Assets
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          for file in build/libs/*.jar; do
-            echo "Uploading $file..."
-            curl -sSL -X POST -H "Authorization: token $GITHUB_TOKEN" \
-              -H "Content-Type: application/java-archive" \
-              --data-binary @"$file" \
-              "${{ steps.create_release.outputs.upload_url }}?name=$(basename "$file")"
-          done
-
+          artifacts: "build/libs/*.jar"
+          token: ${{ secrets.GITHUB_TOKEN }}
