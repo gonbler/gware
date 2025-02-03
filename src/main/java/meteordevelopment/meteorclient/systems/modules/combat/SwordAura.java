@@ -1,7 +1,6 @@
 package meteordevelopment.meteorclient.systems.modules.combat;
 
 import java.util.List;
-import java.util.Set;
 
 import org.apache.commons.lang3.mutable.MutableDouble;
 
@@ -12,17 +11,13 @@ import meteordevelopment.meteorclient.renderer.ShapeMode;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.ColorSetting;
 import meteordevelopment.meteorclient.settings.DoubleSetting;
-import meteordevelopment.meteorclient.settings.EntityTypeListSetting;
 import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
-import meteordevelopment.meteorclient.systems.friends.Friends;
-import meteordevelopment.meteorclient.systems.managers.TargetManager;
 import meteordevelopment.meteorclient.systems.managers.SwapManager.SwapMode;
+import meteordevelopment.meteorclient.systems.managers.TargetManager;
 import meteordevelopment.meteorclient.systems.modules.Categories;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import meteordevelopment.meteorclient.utils.entity.SortPriority;
-import meteordevelopment.meteorclient.utils.entity.TargetUtils;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
@@ -31,14 +26,8 @@ import net.minecraft.client.gui.screen.ingame.GenericContainerScreen;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.AttributeModifiersComponent;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.entity.mob.EndermanEntity;
-import net.minecraft.entity.mob.ZombifiedPiglinEntity;
-import net.minecraft.entity.passive.WolfEntity;
-import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -61,6 +50,10 @@ public class SwordAura extends Module {
 
     private final Setting<Boolean> rotate = sgGeneral.add(new BoolSetting.Builder().name("rotate")
             .description("Whether or not to rotate to the entity to attack it.").defaultValue(true)
+            .build());
+
+    private final Setting<Boolean> snapRotation = sgGeneral.add(new BoolSetting.Builder().name("snap-rotate")
+            .description("Instantly rotates to the targeted entity.").defaultValue(true).visible(() -> rotate.get())
             .build());
 
     private final Setting<Boolean> forcePauseEat = sgGeneral.add(new BoolSetting.Builder()
@@ -155,8 +148,13 @@ public class SwordAura extends Module {
             }
 
             if (rotate.get()) {
-                MeteorClient.ROTATION.requestRotation(
-                        getClosestPointOnBox(target.getBoundingBox(), mc.player.getEyePos()), 9);
+                Vec3d point = getClosestPointOnBox(target.getBoundingBox(), mc.player.getEyePos());
+
+                if (snapRotation.get()) {
+                    MeteorClient.ROTATION.snapAt(point);
+                }
+
+                MeteorClient.ROTATION.requestRotation(point, 9);
 
                 if (!MeteorClient.ROTATION.lookingAt(target.getBoundingBox())) {
                     return;
