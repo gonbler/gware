@@ -32,30 +32,48 @@ jobs:
         run: |
           cd .github/devbuilds
           npm install
-          node get_number.js >> $GITHUB_OUTPUT
+          echo "number=$(node get_number.js)" >> $GITHUB_ENV
 
       - name: Build
-        run: ./gradlew build -Pcommit=${{ github.sha }} -Pdevbuild=${{ steps.dev-build.outputs.number }}
+        run: ./gradlew build -Pcommit=${{ github.sha }} -Pdevbuild=${{ env.number }}
 
-      - name: Webhook Failure
-        if: ${{ failure() }}
-        run: |
-          cd .github/devbuilds
-          npm start ${{ github.ref_name }} https://api.github.com/repos/MeteorDevelopment/meteor-client/compare/${{ github.event.before }}...${{ github.event.after }} false
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: built-jar
+          path: build/libs/*.jar
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: built-jar
+          path: artifacts
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: dev-${{ github.run_number }}
+          release_name: "Dev Build ${{ github.run_number }}"
+          body: "Automated development build from commit ${{ github.sha }}"
+          draft: false
+          prerelease: true
 
-
-      - name: Publish
-        run: ./gradlew publish -Pcommit=${{ github.sha }} -Pdevbuild=${{ steps.dev-build.outputs.number }}
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
         env:
-          MAVEN_METEOR_ALIAS: ${{ secrets.MAVEN_METEOR_ALIAS }}
-          MAVEN_METEOR_TOKEN: ${{ secrets.MAVEN_METEOR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/*.jar
+          asset_name: dev-build-${{ github.run_number }}.jar
+          asset_content_type: application/java-archive
 
-      - name: Upload file & Discord webhook
-        run: |
-          cd .github/devbuilds
-          npm start ${{ github.ref_name }} https://api.github.com/repos/MeteorDevelopment/meteor-client/compare/${{ github.event.before }}...${{ github.event.after }} true
-        env:
-          SERVER_TOKEN: ${{ secrets.SERVER_TOKEN }}
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
