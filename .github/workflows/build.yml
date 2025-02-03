@@ -10,6 +10,9 @@ on:
       - master
       - workflows
 
+permissions:
+  contents: write  # Ensures permissions for creating a release
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,20 +35,6 @@ jobs:
           name: built-jar
           path: build/libs/*.jar
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: built-jar
-          path: artifacts
-
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
@@ -54,17 +43,19 @@ jobs:
         with:
           tag_name: dev-${{ github.run_number }}
           release_name: "Dev Build ${{ github.run_number }}"
-          body: "Automated development build from commit ${{ github.sha }}"
+          body: "Development build ${{ github.sha }}"
           draft: false
           prerelease: true
 
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+      - name: Upload Release Assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/*.jar
-          asset_name: dev-build-${{ github.run_number }}.jar
-          asset_content_type: application/java-archive
+        run: |
+          for file in build/libs/*.jar; do
+            echo "Uploading $file..."
+            curl -sSL -X POST -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Content-Type: application/java-archive" \
+              --data-binary @"$file" \
+              "${{ steps.create_release.outputs.upload_url }}?name=$(basename "$file")"
+          done
 
