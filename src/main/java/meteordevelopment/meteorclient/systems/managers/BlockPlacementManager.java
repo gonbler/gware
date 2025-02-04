@@ -248,7 +248,7 @@ public class BlockPlacementManager {
     private boolean checkLimit(long timestamp, boolean incrementLimit) {
         if (lastSentPacketTimestamp != -1
                 && timestamp - lastSentPacketTimestamp < antiCheatConfig.blockPacketLimit.get()
-                && packetsSent >= 8) {
+                && packetsSent >= 9) {
             return false;
         }
 
