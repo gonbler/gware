@@ -56,11 +56,17 @@ public class AutoMine extends Module {
     private final Setting<Boolean> ignoreNakeds = sgGeneral.add(new BoolSetting.Builder().name("ignore-nakeds")
             .description("Ignore players with no items.").defaultValue(true).build());
 
+    private final Setting<ExtendBreakMode> extendBreakMode = sgGeneral
+            .add(new EnumSetting.Builder<ExtendBreakMode>().name("extend-break-mode")
+                    .description(
+                            "How to mine outside of their surround to place crystals better")
+                    .defaultValue(ExtendBreakMode.None).build());
+
     private final Setting<AntiSwimMode> antiSwim = sgGeneral
             .add(new EnumSetting.Builder<AntiSwimMode>().name("anti-swim-mode")
                     .description(
                             "Starts mining your head block when the enemy starts mining your feet")
-                    .defaultValue(AntiSwimMode.OnMine).build());
+                    .defaultValue(AntiSwimMode.OnMineAndSwim).build());
 
     private final Setting<AntiSurroundMode> antiSurroundMode = sgGeneral
             .add(new EnumSetting.Builder<AntiSurroundMode>().name("anti-surround-mode")
@@ -467,10 +473,37 @@ public class AutoMine extends Module {
 
         if (!inMultipleBlocks) {
             for (Direction dir : Direction.Type.HORIZONTAL) {
-                checkPos.add(new CheckPos(targetPlayer.getBlockPos().offset(dir, 2),
-                        CheckPosType.Extend));
+                switch (extendBreakMode.get()) {
+                    case None -> {
+                    }
+                    case Long -> {
+                        checkPos.add(new CheckPos(targetPlayer.getBlockPos().offset(dir, 2),
+                                CheckPosType.Extend));
+                    }
+                    case Corner -> {
+                        Direction perpDir = getCornerPerpDir(dir);
+
+                        checkPos.add(new CheckPos(targetPlayer.getBlockPos().offset(dir).offset(perpDir),
+                                CheckPosType.Extend));
+                    }
+                }
             }
         }
+
+    }
+
+    private Direction getCornerPerpDir(Direction dir) {
+        if (dir == Direction.NORTH) {
+            return Direction.EAST;
+        } else if (dir == Direction.SOUTH) {
+            return Direction.WEST;
+        } else if (dir == Direction.EAST) {
+            return Direction.NORTH;
+        } else if (dir == Direction.WEST) {
+            return Direction.SOUTH;
+        }
+
+        return null;
     }
 
     private void addBedrockCaseCheckPositions(Set<CheckPos> checkPos) {
@@ -563,6 +596,15 @@ public class AutoMine extends Module {
                     BlockPos antiSurroundBlockPos = targetPlayer.getBlockPos().offset(dir, 2);
                     if (getBlockStateIgnore(antiSurroundBlockPos).isAir()
                             && isCrystalBlock(antiSurroundBlockPos.down())) {
+                        isPosAntiSurround = true;
+                        break;
+                    }
+
+                    Direction perpDir = getCornerPerpDir(dir);
+
+                    BlockPos antiSurroundCornerBlockPos = targetPlayer.getBlockPos().offset(dir).offset(perpDir);
+                    if (getBlockStateIgnore(antiSurroundCornerBlockPos).isAir()
+                            && isCrystalBlock(antiSurroundCornerBlockPos.down())) {
                         isPosAntiSurround = true;
                         break;
                     }
@@ -1021,5 +1063,9 @@ public class AutoMine extends Module {
 
     private enum AntiSurroundMode {
         None, Inner, Outer, Auto
+    }
+
+    private enum ExtendBreakMode {
+        None, Long, Corner
     }
 }
