@@ -18,6 +18,7 @@ import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.ColorSetting;
 import meteordevelopment.meteorclient.settings.DoubleSetting;
 import meteordevelopment.meteorclient.settings.EnumSetting;
+import meteordevelopment.meteorclient.settings.IntSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.managers.RotationManager;
@@ -38,12 +39,18 @@ import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
 
 public class Surround extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgRender = settings.createGroup("Render");
 
     // General
+    private final Setting<Integer> blockLimit = sgGeneral.add(new IntSetting.Builder()
+            .name("block-limit").description("Limit of blocks every tick.").defaultValue(9).min(1).max(9).build());
+
+    private final Setting<Integer> blockLimitProtect = sgGeneral.add(new IntSetting.Builder()
+            .name("block-limit-protect").description("Limit of blocks every tick, when protecting.").defaultValue(4).min(1).max(9).build());
 
     private final Setting<Boolean> pauseEat = sgGeneral.add(new BoolSetting.Builder()
             .name("pause-eat").description("Pauses while eating.").defaultValue(true).build());
@@ -61,8 +68,8 @@ public class Surround extends Module {
     private final Setting<Boolean> selfTrapEnabled = sgGeneral.add(new BoolSetting.Builder()
             .name("self-trap").description("Enables self trap").defaultValue(true).build());
 
-    private final Setting<SelfTrapMode> autoSelfTrapMode =
-            sgGeneral.add(new EnumSetting.Builder<SelfTrapMode>().name("self-trap-mode")
+    private final Setting<SelfTrapMode> autoSelfTrapMode = sgGeneral
+            .add(new EnumSetting.Builder<SelfTrapMode>().name("self-trap-mode")
                     .description("When to build double high").defaultValue(SelfTrapMode.Smart)
                     .visible(() -> selfTrapEnabled.get()).build());
 
@@ -74,8 +81,8 @@ public class Surround extends Module {
     private final Setting<Boolean> extendEnabled = sgGeneral.add(new BoolSetting.Builder()
             .name("extend").description("Enables extend placing").defaultValue(true).build());
 
-    private final Setting<ExtendMode> extendMode =
-            sgGeneral.add(new EnumSetting.Builder<ExtendMode>().name("extend-mode")
+    private final Setting<ExtendMode> extendMode = sgGeneral
+            .add(new EnumSetting.Builder<ExtendMode>().name("extend-mode")
                     .description("When to place extend blocks").defaultValue(ExtendMode.Smart)
                     .visible(() -> extendEnabled.get()).build());
 
@@ -91,10 +98,9 @@ public class Surround extends Module {
             .name("shape-mode").description("How the shapes are rendered.")
             .defaultValue(ShapeMode.Both).build());
 
-    private final Setting<SettingColor> sideColor =
-            sgRender.add(new ColorSetting.Builder().name("side-color")
-                    .description("The side color.").defaultValue(new SettingColor(85, 0, 255, 40))
-                    .visible(() -> render.get() && shapeMode.get() != ShapeMode.Lines).build());
+    private final Setting<SettingColor> sideColor = sgRender.add(new ColorSetting.Builder().name("side-color")
+            .description("The side color.").defaultValue(new SettingColor(85, 0, 255, 40))
+            .visible(() -> render.get() && shapeMode.get() != ShapeMode.Lines).build());
 
     private final Setting<SettingColor> lineColor = sgRender
             .add(new ColorSetting.Builder().name("line-color").description("The line color.")
@@ -188,6 +194,12 @@ public class Surround extends Module {
             return;
         }
 
+        // Very slightly predicted player pos
+        Vec3d predictedPlayerPos = mc.player.getPos().add(mc.player.getVelocity().multiply(0.5));
+        placePoses.sort((x, y) -> {
+            return Double.compare(x.toCenterPos().squaredDistanceTo(predictedPlayerPos), y.toCenterPos().squaredDistanceTo(predictedPlayerPos));
+        });
+
         if (protect.get()) {
             placePoses.forEach(blockPos -> {
                 Box box = new Box(blockPos.getX() - 1, blockPos.getY() - 1, blockPos.getZ() - 1,
@@ -219,23 +231,25 @@ public class Surround extends Module {
             });
         }
 
-        if (!MeteorClient.BLOCK.beginPlacement(placePoses, Items.OBSIDIAN)) {
-            return;
+        boolean useProtectLimit = System.currentTimeMillis() - lastAttackTime <= 40;
+
+        if (MeteorClient.BLOCK.beginPlacement(placePoses, Items.OBSIDIAN)) {
+            for (int i = 0; i < Math.min(placePoses.size(), useProtectLimit ? blockLimitProtect.get() : blockLimit.get()); i++) {
+                BlockPos blockPos = placePoses.get(i);
+
+                // Use the last ticks delayed destroy block because it gets instantly cleared
+                if (blockPos.equals(silentMine.getRebreakBlockPos())
+                        || blockPos.equals(silentMine.getLastDelayedDestroyBlockPos())) {
+                    continue;
+                }
+
+                if (MeteorClient.BLOCK.placeBlock(Items.OBSIDIAN, blockPos)) {
+                    renderLastPlacedBlock.put(blockPos, currentTime);
+                }
+            }
+
+            MeteorClient.BLOCK.endPlacement();
         }
-
-        placePoses.forEach(blockPos -> {
-            // Use the last ticks delayed destroy block because it gets instantly cleared
-            if (blockPos.equals(silentMine.getRebreakBlockPos())
-                    || blockPos.equals(silentMine.getLastDelayedDestroyBlockPos())) {
-                return;
-            }
-
-            if (MeteorClient.BLOCK.placeBlock(Items.OBSIDIAN, blockPos)) {
-                renderLastPlacedBlock.put(blockPos, currentTime);
-            }
-        });
-
-        MeteorClient.BLOCK.endPlacement();
     }
 
     private void checkSelfTrap(List<BlockPos> placePoses, BlockPos adjacentPos) {
@@ -320,10 +334,8 @@ public class Surround extends Module {
 
             double timeCompletion = time / fadeTime.get();
 
-            Color fadedSideColor =
-                    sideColor.get().copy().a((int) (sideColor.get().a * (1 - timeCompletion)));
-            Color fadedLineColor =
-                    lineColor.get().copy().a((int) (lineColor.get().a * (1 - timeCompletion)));
+            Color fadedSideColor = sideColor.get().copy().a((int) (sideColor.get().a * (1 - timeCompletion)));
+            Color fadedLineColor = lineColor.get().copy().a((int) (lineColor.get().a * (1 - timeCompletion)));
 
             event.renderer.box(entry.getKey(), fadedSideColor, fadedLineColor, shapeMode.get(), 0);
         }
