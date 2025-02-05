@@ -91,7 +91,7 @@ public class AutoCrystal extends Module {
     private final Setting<Boolean> suicide = sgGeneral.add(new BoolSetting.Builder()
         .name("suicide").description("Kills yourself!")
         .defaultValue(false).onChanged((v) -> {
-            if (mc.world != null && mc.player != null) cachedValidPlaceSpots();
+            if (mc.world != null || mc.player != null) cachedValidPlaceSpots();
         }).build());
 
     // -- Place -- //
@@ -249,9 +249,29 @@ public class AutoCrystal extends Module {
         if (placeCrystals.get() && !(pauseEatPlace.get() && mc.player.isUsingItem())) {
             cachedValidPlaceSpots();
 
-            for (PlayerEntity player : mc.world.getPlayers()) {
-                if (suicide.get()) {
-                    if (player != mc.player) {
+            if (!suicide.get()) {
+                for (PlayerEntity player : mc.world.getPlayers()) {
+                    if (player == mc.player) {
+                        continue;
+                    }
+
+                    if (Friends.get().isFriend(player)) {
+                        continue;
+                    }
+
+                    if (player.isDead()) {
+                        continue;
+                    }
+
+                    if (ignoreNakeds.get()) {
+                        if (player.getInventory().armor.get(0).isEmpty()
+                            && player.getInventory().armor.get(1).isEmpty()
+                            && player.getInventory().armor.get(2).isEmpty()
+                            && player.getInventory().armor.get(3).isEmpty())
+                            continue;
+                    }
+
+                    if (player.squaredDistanceTo(mc.player.getEyePos()) > 12 * 12) {
                         continue;
                     }
 
@@ -261,38 +281,12 @@ public class AutoCrystal extends Module {
                         && (bestPlacePos == null || testPos.damage > bestPlacePos.damage)) {
                         bestPlacePos = testPos;
                     }
-
-                    continue;
-                } else {
-                    if (player == mc.player) {
-                        continue;
-                    }
                 }
-
-                if (Friends.get().isFriend(player)) {
-                    continue;
-                }
-
-                if (player.isDead()) {
-                    continue;
-                }
-
-                if (ignoreNakeds.get()) {
-                    if (player.getInventory().armor.get(0).isEmpty()
-                            && player.getInventory().armor.get(1).isEmpty()
-                            && player.getInventory().armor.get(2).isEmpty()
-                            && player.getInventory().armor.get(3).isEmpty())
-                        continue;
-                }
-
-                if (player.squaredDistanceTo(mc.player.getEyePos()) > 12 * 12) {
-                    continue;
-                }
-
-                PlacePosition testPos = findBestPlacePosition(player);
+            } else {
+                PlacePosition testPos = findBestPlacePosition(mc.player);
 
                 if (testPos != null
-                        && (bestPlacePos == null || testPos.damage > bestPlacePos.damage)) {
+                    && (bestPlacePos == null || testPos.damage > bestPlacePos.damage)) {
                     bestPlacePos = testPos;
                 }
             }
