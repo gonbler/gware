@@ -10,6 +10,8 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Categories;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.systems.modules.Modules;
+import meteordevelopment.meteorclient.systems.modules.combat.autocrystal.AutoCrystal;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.player.PlayerUtils;
@@ -86,6 +88,10 @@ public class Offhand extends Module {
             return;
         }
 
+        if (Modules.get().get(AutoCrystal.class).isSuiciding()) {
+            return;
+        }
+
         if (mainHandTotem.get()) {
             updateMainHandTotem();
         }
@@ -106,6 +112,10 @@ public class Offhand extends Module {
 
         if (antiGhost.get()) {
             mc.player.getInventory().removeStack(SlotUtils.OFFHAND);
+
+            if (Modules.get().get(AutoCrystal.class).isSuiciding()) {
+                return;
+            }
 
             updateOffhandSlot();
         }
