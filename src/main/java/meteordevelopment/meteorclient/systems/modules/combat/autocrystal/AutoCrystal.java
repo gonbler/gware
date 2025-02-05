@@ -88,6 +88,12 @@ public class AutoCrystal extends Module {
                     "Tries to not blow up loot by instantly killing the player in the packet they die.")
             .defaultValue(true).build());
 
+    private final Setting<Boolean> suicide = sgGeneral.add(new BoolSetting.Builder()
+        .name("suicide").description("Kills yourself!")
+        .defaultValue(false).onChanged((v) -> {
+            if (mc.world != null || mc.player != null) cachedValidPlaceSpots();
+        }).build());
+
     // -- Place -- //
     private final Setting<Double> placeSpeedLimit =
             sgPlace.add(new DoubleSetting.Builder().name("place-speed-limit")
@@ -243,35 +249,44 @@ public class AutoCrystal extends Module {
         if (placeCrystals.get() && !(pauseEatPlace.get() && mc.player.isUsingItem())) {
             cachedValidPlaceSpots();
 
-            for (PlayerEntity player : mc.world.getPlayers()) {
-                if (player == mc.player) {
-                    continue;
-                }
+            if (!suicide.get()) {
+                for (PlayerEntity player : mc.world.getPlayers()) {
+                    if (player == mc.player) {
+                        continue;
+                    }
 
-                if (Friends.get().isFriend(player)) {
-                    continue;
-                }
+                    if (Friends.get().isFriend(player)) {
+                        continue;
+                    }
 
-                if (player.isDead()) {
-                    continue;
-                }
+                    if (player.isDead()) {
+                        continue;
+                    }
 
-                if (ignoreNakeds.get()) {
-                    if (player.getInventory().armor.get(0).isEmpty()
+                    if (ignoreNakeds.get()) {
+                        if (player.getInventory().armor.get(0).isEmpty()
                             && player.getInventory().armor.get(1).isEmpty()
                             && player.getInventory().armor.get(2).isEmpty()
                             && player.getInventory().armor.get(3).isEmpty())
+                            continue;
+                    }
+
+                    if (player.squaredDistanceTo(mc.player.getEyePos()) > 12 * 12) {
                         continue;
-                }
+                    }
 
-                if (player.squaredDistanceTo(mc.player.getEyePos()) > 12 * 12) {
-                    continue;
-                }
+                    PlacePosition testPos = findBestPlacePosition(player);
 
-                PlacePosition testPos = findBestPlacePosition(player);
+                    if (testPos != null
+                        && (bestPlacePos == null || testPos.damage > bestPlacePos.damage)) {
+                        bestPlacePos = testPos;
+                    }
+                }
+            } else {
+                PlacePosition testPos = findBestPlacePosition(mc.player);
 
                 if (testPos != null
-                        && (bestPlacePos == null || testPos.damage > bestPlacePos.damage)) {
+                    && (bestPlacePos == null || testPos.damage > bestPlacePos.damage)) {
                     bestPlacePos = testPos;
                 }
             }
@@ -575,8 +590,10 @@ public class AutoCrystal extends Module {
                                     new Vec3d(downPos.getX() + 0.5, downPos.getY() + 1, downPos.getZ() + 0.5),
                                     _calcIgnoreSet);
 
-                    if (selfDamage > maxPlace.get()) {
-                        continue;
+                    if (!suicide.get()) {
+                        if (selfDamage > maxPlace.get()) {
+                            continue;
+                        }
                     }
 
                     cachedValidSpots
@@ -619,7 +636,15 @@ public class AutoCrystal extends Module {
         return pos.distanceTo(from) <= breakRange.get();
     }
 
+    public boolean isSuiciding() {
+        return suicide.get();
+    }
+
     public boolean shouldBreakCrystal(Entity entity) {
+        if (suicide.get()) {
+            return true;
+        }
+
         boolean damageCheck = false;
 
         double selfDamage = DamageUtils.newCrystalDamage(mc.player, mc.player.getBoundingBox(),
@@ -707,8 +732,12 @@ public class AutoCrystal extends Module {
 
     @EventHandler
     private void onPlayerDeath(PlayerDeathEvent.Death event) {
-        if (event.getPlayer() == null || event.getPlayer() == mc.player)
+        if (event.getPlayer() == null) return;
+
+        if (event.getPlayer() == mc.player) {
+            suicide.set(false);
             return;
+        }
 
         // Maybe more instantly kills the player?
         // Needs more testing
